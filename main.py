@@ -7,24 +7,29 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 
-# --- 1. SETUP TELEGRAM ---
+# --- 1. CONFIGURATION ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
 def send_alert(msg):
     if not BOT_TOKEN or not CHAT_ID:
-        print("❌ Keys missing!")
+        print("❌ Telegram keys are missing!")
         return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(url, json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": msg,
+        "parse_mode": "Markdown"
+    }
+    requests.post(url, json=payload)
 
-# --- 2. SETUP BROWSER ---
+# --- 2. BROWSER SETUP ---
 def get_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new") # The modern headless mode
+    chrome_options.add_argument("--headless=new") 
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36")
     
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     return driver
@@ -35,34 +40,53 @@ def check_changi():
     print("🚀 Launching cloud browser...")
     
     try:
+        # Go to the URL
         driver.get("https://www.changiairport.com/en/flights/arrivals.html")
-        time.sleep(8) # Wait for Changi's fancy animations to load
         
-        # STRATEGY: Find all elements that look like flight times
-        # Note: These class names are GUESSES. You must verify them (See Phase 4 below)
-        # Often Changi uses classes like "flight-time" or "col-time"
+        # Wait for the data to load (Changi is slow)
+        print("⏳ Waiting 15 seconds for flight list...")
+        time.sleep(15) 
         
-        # Let's try to grab the whole row first
-        flight_rows = driver.find_elements(By.CLASS_NAME, "flight-card") 
+        # --- THE FIX BASED ON YOUR HTML ---
+        # We look for the class "flightlist__item" which you found!
+        flights = driver.find_elements(By.CLASS_NAME, "flightlist__item")
         
-        flight_count = len(flight_rows)
-        print(f"🔎 Found {flight_count} flights listed.")
+        count = len(flights)
+        print(f"🔎 Found {count} flights.")
 
-        if flight_count > 5:
-            msg = f"✈️ **Airport Demand Spike!**\n\n"
-            msg += f"I found **{flight_count} incoming flights** on the board.\n"
-            msg += "This might be a good time to head to the queue!\n\n"
-            msg += "_(Data sourced from Changi Public Arrivals)_"
+        if count > 0:
+            # Prepare the message
+            msg = f"✈️ **Airport Update** ({count} flights found)\n"
+            msg += "-----------------------------\n"
             
+            # Loop through the first 5 flights to give you a preview
+            # We use [:5] so we don't spam your phone with 50 lines
+            for i, flight in enumerate(flights[:5]):
+                try:
+                    # Extract details using the classes you provided
+                    # We use .replace('\n', ' ') because sometimes the time is split into two lines
+                    time_val = flight.find_element(By.CLASS_NAME, "flightlist__item-time").text.replace('\n', ' ')
+                    flight_num = flight.find_element(By.CLASS_NAME, "airport__flight-number").text
+                    
+                    # Sometimes terminal info is useful
+                    terminal = flight.find_element(By.CLASS_NAME, "flightlist__item-terminal").text
+                    
+                    msg += f"• *{time_val}* | {flight_num} (T{terminal})\n"
+                except:
+                    # If one row has an error, just skip it
+                    continue
+            
+            msg += "\n🚗 *Check apps for surge!*"
+            
+            # SEND THE ALERT
             send_alert(msg)
-            print("✅ Alert sent.")
+            print("✅ Telegram alert sent!")
+            
         else:
-            print("📉 Traffic looks normal. No alert sent.")
+            print("⚠️ Website loaded, but lists are empty. (Is it 3am?)")
 
     except Exception as e:
         print(f"❌ Error: {e}")
-        # Optional: Send yourself an error log so you know it crashed
-        # send_alert(f"Bot crashed: {e}")
     
     finally:
         driver.quit()

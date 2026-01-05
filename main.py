@@ -1,6 +1,7 @@
 import os
 import time
 import requests
+from collections import Counter
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -44,28 +45,49 @@ def check_changi():
         print("⏳ Waiting 15 seconds for flight list...")
         time.sleep(15) 
         
-        flights = driver.find_elements(By.CLASS_NAME, "flightlist__item")
-        count = len(flights)
-        print(f"🔎 Found {count} flights.")
+        # Get all rows
+        raw_rows = driver.find_elements(By.CLASS_NAME, "flightlist__item")
+        
+        valid_flights = []
+        terminals = []
+
+        # Process rows to remove empty ones
+        for row in raw_rows:
+            try:
+                # specific check to ensure we don't pick up empty headers
+                flight_num = row.find_element(By.CLASS_NAME, "airport__flight-number").text.strip()
+                if not flight_num: 
+                    continue # Skip if no flight number
+
+                time_val = row.find_element(By.CLASS_NAME, "flightlist__item-time").text.replace('\n', ' ')
+                terminal = row.find_element(By.CLASS_NAME, "flightlist__item-terminal").text.strip()
+                
+                # Save data
+                valid_flights.append(f"• *{time_val}* {flight_num} (T{terminal})")
+                terminals.append(terminal)
+            except:
+                continue # Skip rows that crash (ads/spacers)
+
+        count = len(valid_flights)
+        print(f"🔎 Found {count} VALID flights.")
 
         if count > 0:
-            msg = f"✈️ **Airport Update** ({count} flights found)\n"
+            # --- LOGIC: Find the Busiest Terminal ---
+            # Counts ["1", "1", "3", "2"] -> {'1': 2, '3': 1, '2': 1}
+            t_counts = Counter(terminals)
+            best_terminal = t_counts.most_common(1)[0][0] # Gets the terminal with most flights
+            
+            # --- BUILD THE MESSAGE ---
+            msg = f"🚕 **Driver Strategy Update**\n"
+            msg += f"Found {count} flights landing.\n\n"
+            
+            msg += f"🔥 **GO TO TERMINAL {best_terminal}**\n"
+            msg += f"_(T{best_terminal} has {t_counts[best_terminal]} incoming flights)_\n"
             msg += "-----------------------------\n"
             
-            # Show first 8 flights now (increased from 5)
-            for i, flight in enumerate(flights[:8]):
-                try:
-                    time_val = flight.find_element(By.CLASS_NAME, "flightlist__item-time").text.replace('\n', ' ')
-                    flight_num = flight.find_element(By.CLASS_NAME, "airport__flight-number").text
-                    terminal = flight.find_element(By.CLASS_NAME, "flightlist__item-terminal").text
-                    
-                    # --- THE FIX IS HERE ---
-                    # Removed the "T" before {terminal}
-                    msg += f"• *{time_val}* | {flight_num} ({terminal})\n"
-                except:
-                    continue
+            # Show top 8 flights
+            msg += "\n".join(valid_flights[:8])
             
-            msg += "\n🚗 *Check apps for surge!*"
             send_alert(msg)
             print("✅ Telegram alert sent!")
             

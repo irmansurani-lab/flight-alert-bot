@@ -54,36 +54,39 @@ def check_changi():
         # Process rows to remove empty ones
         for row in raw_rows:
             try:
-                # specific check to ensure we don't pick up empty headers
                 flight_num = row.find_element(By.CLASS_NAME, "airport__flight-number").text.strip()
                 if not flight_num: 
-                    continue # Skip if no flight number
+                    continue 
 
                 time_val = row.find_element(By.CLASS_NAME, "flightlist__item-time").text.replace('\n', ' ')
+                
+                # The website gives us "T1", "T2", etc.
                 terminal = row.find_element(By.CLASS_NAME, "flightlist__item-terminal").text.strip()
                 
-                # Save data
-                valid_flights.append(f"• *{time_val}* {flight_num} (T{terminal})")
+                # CLEANER LIST FORMAT: Removed the extra 'T' here
+                valid_flights.append(f"• *{time_val}* {flight_num} ({terminal})")
                 terminals.append(terminal)
             except:
-                continue # Skip rows that crash (ads/spacers)
+                continue 
 
         count = len(valid_flights)
         print(f"🔎 Found {count} VALID flights.")
 
         if count > 0:
             # --- LOGIC: Find the Busiest Terminal ---
-            # Counts ["1", "1", "3", "2"] -> {'1': 2, '3': 1, '2': 1}
             t_counts = Counter(terminals)
-            best_terminal = t_counts.most_common(1)[0][0] # Gets the terminal with most flights
+            # e.g., best_terminal will be "T1"
+            best_terminal = t_counts.most_common(1)[0][0] 
             
             # --- BUILD THE MESSAGE ---
             msg = f"🚕 **Driver Strategy Update**\n"
             msg += f"Found {count} flights landing.\n\n"
             
+            # CLEANER HEADER: Removed extra 'T's
             msg += f"🔥 **GO TO TERMINAL {best_terminal}**\n"
-            msg += f"_(T{best_terminal} has {t_counts[best_terminal]} incoming flights)_\n"
+            msg += f"_({best_terminal} has {t_counts[best_terminal]} incoming flights)_\n"
             msg += "-----------------------------\n"
+            msg += "_Showing next 8 arrivals:_\n" # Added clarification
             
             # Show top 8 flights
             msg += "\n".join(valid_flights[:8])

@@ -40,50 +40,37 @@ def check_changi():
     print("🚀 Launching cloud browser...")
     
     try:
-        # Go to the URL
         driver.get("https://www.changiairport.com/en/flights/arrivals.html")
-        
-        # Wait for the data to load (Changi is slow)
         print("⏳ Waiting 15 seconds for flight list...")
         time.sleep(15) 
         
-        # --- THE FIX BASED ON YOUR HTML ---
-        # We look for the class "flightlist__item" which you found!
         flights = driver.find_elements(By.CLASS_NAME, "flightlist__item")
-        
         count = len(flights)
         print(f"🔎 Found {count} flights.")
 
         if count > 0:
-            # Prepare the message
             msg = f"✈️ **Airport Update** ({count} flights found)\n"
             msg += "-----------------------------\n"
             
-            # Loop through the first 5 flights to give you a preview
-            # We use [:5] so we don't spam your phone with 50 lines
-            for i, flight in enumerate(flights[:5]):
+            # Show first 8 flights now (increased from 5)
+            for i, flight in enumerate(flights[:8]):
                 try:
-                    # Extract details using the classes you provided
-                    # We use .replace('\n', ' ') because sometimes the time is split into two lines
                     time_val = flight.find_element(By.CLASS_NAME, "flightlist__item-time").text.replace('\n', ' ')
                     flight_num = flight.find_element(By.CLASS_NAME, "airport__flight-number").text
-                    
-                    # Sometimes terminal info is useful
                     terminal = flight.find_element(By.CLASS_NAME, "flightlist__item-terminal").text
                     
-                    msg += f"• *{time_val}* | {flight_num} (T{terminal})\n"
+                    # --- THE FIX IS HERE ---
+                    # Removed the "T" before {terminal}
+                    msg += f"• *{time_val}* | {flight_num} ({terminal})\n"
                 except:
-                    # If one row has an error, just skip it
                     continue
             
             msg += "\n🚗 *Check apps for surge!*"
-            
-            # SEND THE ALERT
             send_alert(msg)
             print("✅ Telegram alert sent!")
             
         else:
-            print("⚠️ Website loaded, but lists are empty. (Is it 3am?)")
+            print("⚠️ List is empty.")
 
     except Exception as e:
         print(f"❌ Error: {e}")
